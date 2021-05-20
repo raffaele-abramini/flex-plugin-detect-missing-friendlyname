@@ -2,9 +2,6 @@ import React from 'react';
 import { VERSION } from '@twilio/flex-ui';
 import { FlexPlugin } from 'flex-plugin';
 
-import CustomTaskListContainer from './components/CustomTaskList/CustomTaskList.Container';
-import reducers, { namespace } from './states';
-
 const PLUGIN_NAME = 'DetectMissingFriendlynamePlugin';
 
 export default class DetectMissingFriendlynamePlugin extends FlexPlugin {
@@ -20,27 +17,47 @@ export default class DetectMissingFriendlynamePlugin extends FlexPlugin {
    * @param manager { import('@twilio/flex-ui').Manager }
    */
   init(flex, manager) {
-    this.registerReducers(manager);
+    const MissingFriendlyName = {};
 
-    const options = { sortOrder: -1 };
-    flex.AgentDesktopView
-      .Panel1
-      .Content
-      .add(<CustomTaskListContainer key="DetectMissingFriendlynamePlugin-component" />, options);
-  }
+    class SpyComponent extends React.Component {
+      shouldComponentUpdate(nextProps, nextState, nextContext) {
+        // Re-render only if the members map changes (either bewtween conversations or new members are added)
+        return nextProps.channel?.members !== this.props.channel?.members;
+      }
 
-  /**
-   * Registers the plugin reducers
-   *
-   * @param manager { Flex.Manager }
-   */
-  registerReducers(manager) {
-    if (!manager.store.addReducer) {
-      // eslint: disable-next-line
-      console.error(`You need FlexUI > 1.9.0 to use built-in redux; you are currently on ${VERSION}`);
-      return;
+      render() {
+       try {
+         const {channel} = this.props;
+
+         // if there's not channel source, or there are not members or we already analyzed this channel, don't do anything
+         if (!channel?.source ||!channel?.members?.size || MissingFriendlyName[channel?.source.sid]) {
+           return <></>;
+         }
+
+         const membersWithoutFriendlyNames = Array.from(channel.members.values()).filter(m => !m.friendlyName);
+         const usersFromStore = manager.store.getState().flex.chat.users;
+
+         if (membersWithoutFriendlyNames.length) {
+           MissingFriendlyName[channel.source.sid] = {
+             channelMembers: membersWithoutFriendlyNames,
+             chatUsers: membersWithoutFriendlyNames.map(m => usersFromStore[m.source.identity])
+           }
+
+           // Before 1.26
+           flex.ErrorManager.createAndProcessError(`Detected channel users without a friendly name for ${channel.source.sid}`, {
+             context: "Custom",
+             description:`Detected channel users without a friendly name for ${channel.source.sid}.
+Participant: ${membersWithoutFriendlyNames.map(m => `${m.source.identity} - ${m.source.sid}`).join(",")}
+Member: ${membersWithoutFriendlyNames.map(m => `${usersFromStore[m.source.identity]?.identity} - ${usersFromStore[m.source.identity]?.descriptor?.sid}`).join(",")}
+`
+           })
+
+           return <></>;
+         }
+       } catch(e) {}
+      };
     }
 
-    manager.store.addReducer(namespace, reducers);
+    flex.MessagingCanvas.Content.add(<SpyComponent key="Spy" />);
   }
 }
