@@ -37,7 +37,6 @@ export default class DetectMissingFriendlynamePlugin extends FlexPlugin {
               chatUsers: membersWithoutFriendlyNames.map(m => usersFromStore[m.source.identity]),
             };
 
-            // Notice, this approach will get deprecate it 1.26
             flex.ErrorManager.createAndProcessError(`Detected channel users without a friendly name for ${channel.source.sid}`, {
               context: "Custom",
               description: `Detected channel users without a friendly name for ${channel.source.sid}.
